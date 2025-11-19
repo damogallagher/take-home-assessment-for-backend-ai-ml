@@ -19,11 +19,11 @@ class MockAIService {
     });
   }
 
-  async chatCompletion(messages) {
+  async chatCompletion(messages, model = 'gpt-3.5-turbo') {
     await this.simulateDelay();
     const lastMessage = messages[messages.length - 1]?.content || '';
     const lowerMessage = lastMessage.toLowerCase();
-    
+
     // Optimized response matching
     if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
       return 'Hello! How can I help you today?';
@@ -34,11 +34,11 @@ class MockAIService {
     if (lowerMessage.includes('bye') || lowerMessage.includes('goodbye')) {
       return 'Goodbye! Have a great day!';
     }
-    
+
     return `I understand you said: "${lastMessage.substring(0, 100)}${lastMessage.length > 100 ? '...' : ''}". This is a mock response. To use real AI, set OPENAI_API_KEY environment variable.`;
   }
 
-  async generateText(prompt, _systemPrompt) {
+  async generateText(prompt, _systemPrompt, model = 'gpt-3.5-turbo') {
     await this.simulateDelay();
     const wordCount = prompt.split(/\s+/).length;
     const preview = prompt.substring(0, 100);
@@ -120,41 +120,41 @@ class OpenAIService {
     }
   }
 
-  async chatCompletion(messages) {
+  async chatCompletion(messages, model = 'gpt-3.5-turbo') {
     await this.ensureInitialized();
 
-    // Check cache first
-    const cacheKey = `chat:${hash(JSON.stringify(messages))}`;
+    // Check cache first - include model in cache key to avoid cross-model contamination
+    const cacheKey = `chat:${model}:${hash(JSON.stringify(messages))}`;
     const cached = cacheService.get(cacheKey);
     if (cached) {
       return cached;
     }
 
     const response = await this.client.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: model,
       messages: messages,
       temperature: 0.7,
       max_tokens: 1000,
     });
 
     const result = response.choices[0]?.message?.content || 'No response generated';
-    
+
     // Cache the result for 5 minutes
     cacheService.set(cacheKey, result, 5 * 60 * 1000);
-    
+
     return result;
   }
 
-  async generateText(prompt, systemPrompt) {
+  async generateText(prompt, systemPrompt, model = 'gpt-3.5-turbo') {
     const messages = [];
-    
+
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
     }
-    
+
     messages.push({ role: 'user', content: prompt });
 
-    return this.chatCompletion(messages);
+    return this.chatCompletion(messages, model);
   }
 
   async analyzeSentiment(text) {
@@ -185,26 +185,26 @@ class AIService {
     }
   }
 
-  async chatCompletion(messages) {
+  async chatCompletion(messages, model = 'gpt-3.5-turbo') {
     try {
-      return await this.service.chatCompletion(messages);
+      return await this.service.chatCompletion(messages, model);
     } catch (error) {
       // Fallback to mock if OpenAI fails
       if (this.useOpenAI) {
         logger.warn('OpenAI request failed, falling back to mock service', error);
-        return this.mockFallback.chatCompletion(messages);
+        return this.mockFallback.chatCompletion(messages, model);
       }
       throw error;
     }
   }
 
-  async generateText(prompt, systemPrompt) {
+  async generateText(prompt, systemPrompt, model = 'gpt-3.5-turbo') {
     try {
-      return await this.service.generateText(prompt, systemPrompt);
+      return await this.service.generateText(prompt, systemPrompt, model);
     } catch (error) {
       if (this.useOpenAI) {
         logger.warn('OpenAI request failed, falling back to mock service', error);
-        return this.mockFallback.generateText(prompt, systemPrompt);
+        return this.mockFallback.generateText(prompt, systemPrompt, model);
       }
       throw error;
     }
